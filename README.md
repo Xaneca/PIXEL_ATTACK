@@ -1,10 +1,6 @@
 # PIXEL_ATTACK
 This repository explores adversarial attacks that challenge the robustness of image classification models. Our goal is to design and evaluate algorithms capable of identifying minimal pixel perturbations that successfully mislead deep learning classifiers.
 
-# Pixel-Attacks Project README
-
-This README describes the folder structure and the functionality of the main files in the **PIXEL-ATTACKS** project, including metric scripts, graph generation, and distortion analysis.
-
 ---
 
 ## 📄 Main Files

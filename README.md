@@ -86,7 +86,3 @@ After adversarial pixels are initially detected, this script searches around tho
 
 * more effective
 * less perceptible
-
----
-
-If you want, I can also add installation instructions, examples of usage, or GitHub-style formatting like badges and tables.

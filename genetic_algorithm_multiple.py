@@ -117,17 +117,18 @@ def crossover_two_point(p1, p2, number_pixels):
   
 #   return ni
 
-def crossover_uniform(p1, p2, PROB_CROSSOVER, TOURNAMENT, PIXELS):
-    ni = []
+def crossover_uniform(p1, p2, PROB_CROSSOVER, PIXELS):
+    genotype = []
+
     for i in range(PIXELS):
-        if random.random() < PROB_CROSSOVER:
-            ni.append(crossover_pixel(p1['genotype'][i], p2['genotype'][i]))
-        else:
-            ni.append(choose_indiv(population, TOURNAMENT)['genotype'][i])
+        new_pixel = []
+        for g1, g2 in zip(p1['genotype'][i], p2['genotype'][i]):
+            new_pixel.append(int(g1) if random.random() < PROB_CROSSOVER else int(g2))
+        genotype.append(np.array(new_pixel, dtype=int))
 
-    return {'genotype': ni, 'fitness': None, 'confidence': None, 'success': None}
+    return {'genotype': genotype, 'fitness': None, 'confidence': None, 'success': None}
 
-def crossover_block_(p1, p2, PROB_CROSSOVER, TOURNAMENT, PIXELS):
+def crossover_block(p1, p2, PROB_CROSSOVER, PIXELS):
     ni = []
     for i in range(PIXELS):
         # CHOOSE WHICH (x,y) - p1 or p2

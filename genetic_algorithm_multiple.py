@@ -51,8 +51,10 @@ def choose_indiv(population, TOURNAMENT):     # cópia do 1º projeto - inaltera
     pool.sort(key=lambda i: i['fitness'])         # organizar de acordo com o fitness
     return copy.deepcopy(pool[-1])
 
-# CROSSOVER POINT
-def crossover(p1, p2, number_pixels):
+########################################### CROSSOVER FUNCTIONS ######################################
+
+# CROSSOVER ONE POINT
+def crossover_one_point(p1, p2, number_pixels):
   genotype = []
   max_point = (5 * number_pixels) - 1
 
@@ -72,6 +74,30 @@ def crossover(p1, p2, number_pixels):
 
   return {'genotype': genotype, 'fitness': None, 'confidence': None, 'success': None}
 
+# CROSSOVER TWO POINT
+def crossover_two_point(p1, p2, number_pixels):
+    genotype = []
+    max_point = (5 * number_pixels) - 1
+
+    p1_flat = np.array(p1['genotype']).flatten()
+    p2_flat = np.array(p2['genotype']).flatten()
+
+    # TWO CUT POINTS
+    cut_point1 = random.randint(1, max_point - 1)
+    cut_point2 = random.randint(cut_point1 + 1, max_point)
+
+    # TWO POINT CROSSOVER: chooses 1 segment at a time
+    for i in range(0, cut_point1):
+        genotype.append(p1_flat[i])
+    for i in range(cut_point1, cut_point2):
+        genotype.append(p2_flat[i])
+    for i in range(cut_point2, max_point + 1):
+        genotype.append(p1_flat[i])
+
+    genotype = np.split(np.array(genotype), len(genotype) // 5) # Split into 'number_pixels' again instead of flatten
+
+    return {'genotype': genotype, 'fitness': None, 'confidence': None, 'success': None}
+
 # UNIFORME
 # def crossover(PROB_CROSSOVER, TOURNAMENT, PIXELS):
 #   # Parent Selection
@@ -90,6 +116,38 @@ def crossover(p1, p2, number_pixels):
 #         ni = choose_indiv(population, TOURNAMENT)[i]
   
 #   return ni
+
+def crossover_uniform(p1, p2, PROB_CROSSOVER, TOURNAMENT, PIXELS):
+    ni = []
+    for i in range(PIXELS):
+        if random.random() < PROB_CROSSOVER:
+            ni.append(crossover_pixel(p1['genotype'][i], p2['genotype'][i]))
+        else:
+            ni.append(choose_indiv(population, TOURNAMENT)['genotype'][i])
+
+    return {'genotype': ni, 'fitness': None, 'confidence': None, 'success': None}
+
+def crossover_block_(p1, p2, PROB_CROSSOVER, TOURNAMENT, PIXELS):
+    ni = []
+    for i in range(PIXELS):
+        # CHOOSE WHICH (x,y) - p1 or p2
+        if random.random() < PROB_CROSSOVER:
+            x_y = p1['genotype'][i][:2]
+        else:
+            x_y = p2['genotype'][i][:2]
+
+        # CHOOSE HICH COLOR (r,g,b) - p1 or p2
+        if random.random() < PROB_CROSSOVER:
+            r_g_b = p1['genotype'][i][2:]
+        else:
+            r_g_b = p2['genotype'][i][2:]
+
+        # CONCATENATE
+        ni.append(list(x_y) + list(r_g_b))
+
+    return {'genotype': ni, 'fitness': None, 'confidence': None, 'success': None}
+
+#####################################################################################################
 
 # Funções de mutação para cada gene
 def mutate_por_gene(p, w, h, PROB_MUTATION):
@@ -266,7 +324,7 @@ def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERA
                 while(np.array_equal(p2['genotype'], p1['genotype'])):
                   p2 = choose_indiv(population, TOURNAMENT)
                 # Recombination
-                ni = crossover(p1, p2, PIXELS)
+                ni = crossover_one_point(p1, p2, PIXELS)
 
                 #evaluate(ni, image, true_class, model)
 

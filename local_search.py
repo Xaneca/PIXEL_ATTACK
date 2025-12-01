@@ -10,6 +10,7 @@ import re
 
 ### CHANGE PARAMETERS HERE ### 
 nruns = 5
+seeds = list(range(nruns))
 n_samples = 500
 n_pixels = 3
 results_file = "./results"
@@ -252,7 +253,7 @@ def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radi
             candidate = {'genotype': new_genotype, 'fitness': None,
                          'confidence': None, 'success': None}
 
-            evaluate([candidate], x_test[img_id], true_label, models[0], {}, len(ind['genotype']))
+            evaluate([candidate], x_test[img_id], true_label, models[0], {}, len(ind['genotype']))  # talvez testar com a populaçao
 
             if candidate['fitness'] > best_fitness:
                 best_fitness = candidate['fitness']
@@ -286,12 +287,27 @@ def main():
     # bounds = [[0, w - 1], [0, h - 1], [0, 255], [0, 255], [0, 255]]
     # bounds = np.array(bounds)
 
+    # RECEIVE SEED NUMBER FROM ARG:
+    cur_run = -1
+    if len(sys.argv[1:]) > 0:
+        cur_run = int(sys.argv[1])
+        if cur_run > nruns or cur_run < 1:
+            print(f"ARGV Parameter (Current Run number): Run must be between [1, {nruns}]")
+            raise SystemExit
+
     # READ FILE
     for model in modelNames:
         for approach in abordagens:
             print(f"\n=== MODEL: {model} | APPROACH: {approach} ===")
             
-            for run in range(1, nruns + 1):
+            # IN CASE WE JUST WANT 1 SPECIFIC RUN
+                # RUN IN PARALLEL
+            if cur_run > 0:
+                this_range = range(cur_run, cur_run +1)
+            else:
+                this_range = range(1, nruns + 1)
+
+            for run in this_range:
                 print(f"\n=== RUN {run} ===")
                 input_file = os.path.join(results_file, model, approach, f"run_{run}", "best_individuals.csv")
                 if not os.path.exists(input_file):

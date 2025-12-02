@@ -34,6 +34,7 @@ pixels = 3  # 1 ; 3 ; 5
 mut = 0.25
 cr = 0.9
 tournament = 2
+N_TRIALS = 20
 
 # Load dataset
 data = CIFAR()
@@ -159,7 +160,7 @@ for model in models:
             if not os.path.exists(img_folder):
                 os.makedirs(img_folder)
 
-            best_fit, avg_fit, best_ind, suc, suc_act_total, n_covered_pixels = genetic_algorithm(img, label, model, pop_size, generations, mut, cr, tournament, pixels, bounds, img_folder, seeds[run-1])
+            best_fit, avg_fit, best_ind, suc, suc_act_total, n_covered_pixels = genetic_algorithm(img, label, model, pop_size, generations, mut, cr, tournament, pixels, bounds, img_folder, seeds[run-1], n_trials=N_TRIALS)
             fig = plt.figure(num=1, clear=True)
             plt.plot(list(range(generations)), best_fit)
             plt.plot(list(range(generations)), avg_fit)

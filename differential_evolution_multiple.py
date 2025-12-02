@@ -119,7 +119,8 @@ def fitness(population, success_x, confidence_x, image_orig, dicio, true_label, 
         x1 = x[i]
         t_difs += (abs(x1[2] - image_orig[x1[0]][x1[1]][0]) + abs(x1[3] - image_orig[x1[0]][x1[1]][1]) + abs(x1[4] - image_orig[x1[0]][x1[1]][2])) / 3
 
-    f = 1.0 / ( t_difs + 1) + 1 * int(success_x[ind]) + (1.0 /(confidence_x[ind][true_label]+1))
+    # ver isto da fitness ⚠️
+    f = 1.0 / ( t_difs / (255 * number_pixels) + 1) + 1 * int(success_x[ind]) + (1.0 /(confidence_x[ind][true_label]+1))
     population[ind]['fitness'] = f
     population[ind]['confidence'] = confidence_x[ind]
     population[ind]['success'] = success_x[ind]

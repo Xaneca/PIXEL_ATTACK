@@ -79,76 +79,24 @@ def read_file(file_path):
     
     return df
 
-def pixel_test(ind, img_id, true_label):
-    # for p in range(len(genotype)):
-    #     population =
-
-    # x, img, true_class, model, verbose=False
-    print(ind)
-
-    genotype = ind['genotype']
+def dif(image_orig, x):
+    t_difs = 0
+    for i in range(n_pixels):  # multiple pixels
+        x1 = x[i]
+        # print("DEBUG")
+        # print(f"x1 = {x1[2]}, {x1[3]}, {x1[4]}")
+        # print(f"orig = {image_orig[x1[0]][x1[1]][0]}, {image_orig[x1[0]][x1[1]][1]}, {image_orig[x1[0]][x1[1]][2]}")
+        t_difs += (abs(x1[2] - image_orig[x1[0]][x1[1]][0]) + abs(x1[3] - image_orig[x1[0]][x1[1]][1]) + abs(x1[4] - image_orig[x1[0]][x1[1]][2])) / 3
     
-    evaluate([ind], x_test[img_id], true_label, models[0], {}, n_pixels)
-    
-    print(ind)
-    
-    l_suc, l_conf = attack_success([genotype], x_test[img_id], true_label, models[0])
-
-    print(l_suc)
-    print(l_conf)
-
-def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radius=30):
-    best_fitness = ind['fitness']
-    best_genotype = [p.copy() for p in ind['genotype']]
-
-    (h, w, d) = x_test[0].shape
-    
-    for _ in range(n_trials):
-        new_genotype = []
-        for pixel in ind['genotype']:
-            x0, y0, r0, g0, b0 = pixel
-            original_rgb = np.array([r0, g0, b0])
-            original_rgb = np.array([x_test[img_id][pixel[0]][pixel[1]][0], x_test[img_id][pixel[0]][pixel[1]][1], x_test[img_id][pixel[0]][pixel[1]][2]])
-            
-            # Deslocamento pequeno no pixel
-            dx = np.random.randint(-pixel_radius, pixel_radius + 1)
-            dy = np.random.randint(-pixel_radius, pixel_radius + 1)
-            new_x = np.clip(x0 + dx, 0, w - 1)
-            new_y = np.clip(y0 + dy, 0, h - 1)
-            
-            # Pequena variação RGB
-            new_rgb = original_rgb + np.random.randint(-rgb_radius, rgb_radius + 1, size=3)
-            new_rgb = np.clip(new_rgb, 0, 255)
-            
-            new_pixel = [new_x, new_y] + new_rgb.tolist()
-            # new_pixel = [x0, y0] + new_rgb.tolist()
-            new_genotype.append(new_pixel)
-        
-        candidate = {'genotype': new_genotype, 'fitness': None, 'confidence': None, 'success': None}
-        
-        # Avalia fitness
-        evaluate([candidate], x_test[img_id], true_label, models[0], {}, n_pixels)
-        
-        # Atualiza se melhorar
-        if candidate['fitness'] > best_fitness:
-            best_fitness = candidate['fitness']
-            best_genotype = [p.copy() for p in new_genotype]
-            # print(f"Found better fitness: {best_fitness}")
-    
-    # Atualiza o indivíduo
-    ind['genotype'] = best_genotype
-    ind['fitness'] = best_fitness
-    
-    # Avalia sucesso final
-    l_suc, l_conf = attack_success([ind['genotype']], x_test[img_id], true_label, models[0])
-    ind['success'] = l_suc
-    ind['confidence'] = l_conf
-    
-    # print("Final individual:", ind)
-    return best_genotype, best_fitness
-
+    return t_difs
 
 def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radius=20):
+    it_to_final_best = 0
+    it_to_first_best = 0
+    
+    num_bests = 0
+
+    cur_suc = ind['success']
 
     best_fitness = ind['fitness']
     best_genotype = [p.copy() for p in ind['genotype']]
@@ -163,68 +111,7 @@ def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radi
         extra = 1 if i < remainder else 0
         total_trials = trials_per_pixel + extra
         
-        for _ in range(total_trials):
-
-            # começamos SEMPRE no melhor genótipo atual
-            new_genotype = [p.copy() for p in best_genotype]
-
-            # pixel a alterar
-            x0, y0, r0, g0, b0 = best_genotype[i]
-
-            # obter RGB original da imagem
-            orig_r, orig_g, orig_b = x_test[img_id][x0][y0]
-
-            # pequeno deslocamento opcional (podes remover isto)
-            dx = np.random.randint(-pixel_radius, pixel_radius+1)
-            dy = np.random.randint(-pixel_radius, pixel_radius+1)
-            new_x = int(np.clip(x0 + dx, 0, w-1))
-            new_y = int(np.clip(y0 + dy, 0, h-1))
-
-            # gerar RGB próximo do original (NÃO do genotype)
-            new_r = np.clip(orig_r + np.random.randint(-rgb_radius, rgb_radius+1), 0, 255)
-            new_g = np.clip(orig_g + np.random.randint(-rgb_radius, rgb_radius+1), 0, 255)
-            new_b = np.clip(orig_b + np.random.randint(-rgb_radius, rgb_radius+1), 0, 255)
-
-            # substituir apenas ESTE pixel
-            new_genotype[i] = [new_x, new_y, int(new_r), int(new_g), int(new_b)]
-
-            # avaliar
-            candidate = {'genotype': new_genotype, 'fitness': None,
-                         'confidence': None, 'success': None}
-
-            evaluate([candidate], x_test[img_id], true_label, models[0], {}, len(ind['genotype']))
-
-            if candidate['fitness'] > best_fitness:
-                best_fitness = candidate['fitness']
-                best_genotype = [p.copy() for p in new_genotype]
-
-    # atualizar o indivíduo final
-    ind['genotype'] = best_genotype
-    ind['fitness'] = best_fitness
-
-    # avaliar sucesso
-    l_suc, l_conf = attack_success([best_genotype], x_test[img_id], true_label, models[0])
-    ind['success'] = l_suc
-    ind['confidence'] = l_conf
-
-    return best_genotype, best_fitness
-
-def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radius=20):
-
-    best_fitness = ind['fitness']
-    best_genotype = [p.copy() for p in ind['genotype']]
-
-    (h, w, d) = x_test[0].shape
-    
-    # número de tentativas por pixel
-    trials_per_pixel = n_trials // len(ind['genotype'])
-    remainder = n_trials % len(ind['genotype'])  # para dar +1 ao primeiro pixel
-
-    for i, pixel in enumerate(ind['genotype']):
-        extra = 1 if i < remainder else 0
-        total_trials = trials_per_pixel + extra
-        
-        for _ in range(total_trials):
+        for it in range(total_trials):
 
             # começamos sempre no melhor genótipo atual
             new_genotype = [p.copy() for p in best_genotype]
@@ -255,9 +142,16 @@ def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radi
 
             evaluate([candidate], x_test[img_id], true_label, models[0], {}, len(ind['genotype']))  # talvez testar com a populaçao
 
-            if candidate['fitness'] > best_fitness:
+            # if candidate['fitness'] > best_fitness:   # if we want to accept to pass from True -> False, because fitness higher
+            if candidate['fitness'] > best_fitness and (not cur_suc or (candidate['success'])):
                 best_fitness = candidate['fitness']
                 best_genotype = [p.copy() for p in new_genotype]
+                cur_run = candidate['success']
+
+                if num_bests == 0:
+                    it_first_best = it
+                num_bests += 1
+                it_final_best = it
 
     # atualizar o indivíduo final
     ind['genotype'] = best_genotype
@@ -268,7 +162,10 @@ def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radi
     ind['success'] = l_suc
     ind['confidence'] = l_conf
 
-    return best_genotype, best_fitness
+    # diferença entre imagem original e perturbada
+    dif_value = dif(x_test[img_id], best_genotype)
+
+    return best_genotype, best_fitness, l_suc, l_conf, dif_value, it_to_final_best, it_to_first_best
 
 
 def main():
@@ -308,6 +205,9 @@ def main():
                 this_range = range(1, nruns + 1)
 
             for run in this_range:
+                SEED = seeds[run]
+                np.random.seed(SEED)
+
                 print(f"\n=== RUN {run} ===")
                 input_file = os.path.join(results_file, model, approach, f"run_{run}", "best_individuals.csv")
                 if not os.path.exists(input_file):
@@ -318,24 +218,37 @@ def main():
                 print("File extracted!")
 
                 # EXTRACT ARRAYS FROM DF:
+                true_labels = df['true label'].to_numpy()
                 best_individuals_before = df['best pixel'].to_numpy()
                 best_fitness_before = df['fitness'].to_numpy()
+                best_success_before = (df['true label'] != df['predicted label']).to_numpy()     # if model identified correctly
+                best_confidence_before = df['post confidence true label']   # confidence in true label
                 img_ids = df['img_id']
                 true_labels = df['true label']
 
-                # METRIRCS FOR COMPARISON
+                # METRICS FOR COMPARISON
                 best_individuals_after = []
                 best_fitness_after = []
+                best_success_after = []
+                best_confidence_after = []
+                best_dif_after = []
+                it_final_best = []
+                it_first_best = []
                 img_changed = []
 
                 for i in range(len(best_individuals_before)):
                     genotype = best_individuals_before[i]
                     fitness = best_fitness_before[i]
                     ind = {'genotype': genotype, 'fitness': fitness, 'confidence': None, 'success': None}
-                    gen, fit = local_search(img_ids[i], ind, true_labels[i])
+                    gen, fit, suc, conf, dif_value, it_final_best_value, it_first_best_value = local_search(img_ids[i], ind, true_labels[i])
 
                     best_individuals_after.append(gen)
                     best_fitness_after.append(fit)
+                    best_success_after.append(suc)
+                    best_confidence_after.append(conf)
+                    best_dif_after.append(dif_value)
+                    it_final_best.append(it_final_best)
+                    it_first_best.append(it_first_best)
 
                     if fit != best_fitness_before[i]:
                         print(i, "|", best_fitness_before[i], "|", best_fitness_after[i])
@@ -361,7 +274,14 @@ def main():
                             'genotype_before': best_individuals_before[i],
                             'genotype_after': best_individuals_after[i],
                             'fitness_before': best_fitness_before[i],
-                            'fitness_after': best_fitness_after[i]
+                            'fitness_after': best_fitness_after[i],
+                            'success_before': best_success_before[i],
+                            'success_after': best_success_after[i][0],
+                            'confidence_before': best_confidence_before[i],
+                            'confidence_after': ','.join(map(str, best_confidence_after[i].tolist())),
+                            'dif': best_dif_after[i],
+                            'it_final_best': it_final_best[i],
+                            'it_first_best': it_first_best[i]
                         })
 
                     # mesmo diretório do ficheiro lido
@@ -371,9 +291,34 @@ def main():
                 else:
                     print("No individuals changed in this run.")
 
+def pixel_test(ind, img_id, true_label):
+    # for p in range(len(genotype)):
+    #     population =
+
+    # x, img, true_class, model, verbose=False
+    print("our ind:")
+    print(ind)
+    print("orig image:")
+
+    genotype = ind['genotype']
+    
+    evaluate([ind], x_test[img_id], true_label, models[0], {}, n_pixels)
+    
+    print(ind)
+    
+    l_suc, l_conf = attack_success([genotype], x_test[img_id], true_label, models[0])
+
+    t_dif = dif(x_test[img_id], genotype)
+
+    print("FINAL PRINTS:")
+    print(l_suc)
+    print(l_conf)
+    print(t_dif)
+
 # def main():
 #     img_id = 2757
 #     genotype = [[27, 18, 40,  0, 87], [ 19,  16,  94, 192, 146], [  8,   4, 118,  48,  72]]
+#     genotype = [[27, 18, 8,  0, 1], [ 19,  16,  87, 27, 33], [  8,   4, 114,  58,  67]]
 #     fitness = 2.006928287257223
 #     true_label = 1
 #     ind = {'genotype': genotype, 'fitness': fitness, 'confidence': None, 'success': None}
@@ -381,9 +326,13 @@ def main():
 #     original_rgb_1 = np.array([x_test[img_id][27][18][0], x_test[img_id][27][18][1], x_test[img_id][27][18][2]])
 #     original_rgb_2 = np.array([x_test[img_id][19][16][0], x_test[img_id][19][16][1], x_test[img_id][19][16][2]])
 #     original_rgb_3 = np.array([x_test[img_id][8][4][0], x_test[img_id][8][4][1], x_test[img_id][8][4][2]])
+    
+    
 #     print(original_rgb_1, original_rgb_2, original_rgb_3)
 
 #     pixel_test(ind, img_id, true_label)
+
+#     print(dif(x_test[img_id], [[27,18,8,0,1], [19,16,87,27,33], [8,4,114, 58, 67]]))
 
 if __name__ == "__main__":
     main()

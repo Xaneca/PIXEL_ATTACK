@@ -143,3 +143,75 @@ with open(output_file_path, "w") as output_file:
                 print(suc_rate, file=output_file)
                 print(np.mean(suc_rate), np.std(suc_rate), file=output_file)
                 print(abv, np.mean(suc_rate), np.std(suc_rate), file=output_file_simp) # SIMPLIFIED TXT
+
+        ##########################
+        #   LOCAL SEARCH         #
+        ##########################
+        print("---------- Local Search Metrics ----------", file=output_file)
+        print("---------- Local Search Metrics ----------", file=output_file_simp)
+
+        for modelName in modelNames:
+            print(modelName, file=output_file_simp)
+
+            for abordagem in abordagens:
+
+                print(modelName, " - ", abordagem, file=output_file)
+
+                fitness_per_run = []
+                it_first_per_run = []
+                it_final_per_run = []
+                succ_trans_per_run = []
+
+                # Cabeçalho da tabela
+                print("Run,Fitness change %,It first best,It final best,Success F→T %", file=output_file)
+
+                for i in range(1, nruns + 1):
+
+                    file_path = f"{results_path}/{modelName}/{abordagem}/run_{i}/local_search_new_best_pixels_temp.csv"
+
+                    try:
+                        df = pd.read_csv(file_path)
+                    except FileNotFoundError:
+                        print(f"Missing file: {file_path}", file=output_file)
+                        continue
+
+                    # Limpar espaços nos nomes das colunas
+                    df.columns = df.columns.str.strip()
+
+                    # Normalizar booleanos
+                    df["success_before_norm"] = df["success_before"].astype(str).str.contains("True")
+                    df["success_after_norm"] = df["success_after"].astype(str).str.contains("True")
+
+                    # FITNESS IMPROVEMENT %
+                    df["fitness_change_pct"] = ((df["fitness_after"] - df["fitness_before"]) / df["fitness_before"]) * 100
+                    fitness_mean = df["fitness_change_pct"].mean()
+                    fitness_per_run.append(fitness_mean)
+
+                    # ITERAÇÕES
+                    it_first = df["it_first_best"].mean()
+                    it_final = df["it_final_best"].mean()
+                    it_first_per_run.append(it_first)
+                    it_final_per_run.append(it_final)
+
+                    # TRANSIÇÕES DE SUCCESS (False → True)
+                    transitions = ((df["success_before_norm"] == False) & (df["success_after_norm"] == True)).sum()
+                    succ_rate = (transitions / len(df)) * 100
+                    succ_trans_per_run.append(succ_rate)
+
+                    # Print por run numa linha da tabela
+                    print(f"{i},{fitness_mean:.2f},{it_first:.1f},{it_final:.1f},{succ_rate:.1f}", file=output_file)
+
+                # ==== PRINT MÉDIAS GERAIS ====
+                print("\n--- Summary ---", file=output_file)
+                print(f"Average Fitness change %: {np.mean(fitness_per_run):.2f} ± {np.std(fitness_per_run):.2f}", file=output_file)
+                print(f"Average It first best: {np.mean(it_first_per_run):.1f} ± {np.std(it_first_per_run):.1f}", file=output_file)
+                print(f"Average It final best: {np.mean(it_final_per_run):.1f} ± {np.std(it_final_per_run):.1f}", file=output_file)
+                print(f"Average Success F→T %: {np.mean(succ_trans_per_run):.1f} ± {np.std(succ_trans_per_run):.1f}", file=output_file)
+
+                # ---- SIMPLIFIED TEXT ----
+                print(abordagem,
+                    f"{np.mean(fitness_per_run):.2f}",
+                    f"{np.mean(it_first_per_run):.1f}",
+                    f"{np.mean(it_final_per_run):.1f}",
+                    f"{np.mean(succ_trans_per_run):.1f}",
+                    file=output_file_simp)

@@ -223,7 +223,7 @@ def dicio_trues_add(dicio, gene, soma_dif, image_orig, suc, suc_act, number_pixe
 
   return dicio, soma_dif, suc, suc_act, novo
 
-def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERATIONS, PROB_MUTATION, PROB_CROSSOVER, TOURNAMENT, PIXELS, bounds, folder_path, SEED):
+def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERATIONS, PROB_MUTATION, PROB_CROSSOVER, TOURNAMENT, PIXELS, bounds, folder_path, SEED, n_trials=20):
     random.seed(SEED)
     dicio_total_pixels = {}
     # Boundaries

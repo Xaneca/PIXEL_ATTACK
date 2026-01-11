@@ -149,9 +149,9 @@ def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radi
                 cur_run = candidate['success']
 
                 if num_bests == 0:
-                    it_first_best = it
+                    it_to_first_best = it
                 num_bests += 1
-                it_final_best = it
+                it_to_final_best = it
 
     # atualizar o indivíduo final
     ind['genotype'] = best_genotype

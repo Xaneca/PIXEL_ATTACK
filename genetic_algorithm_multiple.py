@@ -15,6 +15,10 @@ import keras
 from PIL import Image
 from differential_evolution_multiple import evaluate
 from helper import perturb_image_mult_pixel
+from local_search import local_search
+import builtins
+import torch
+
 
 def predict_classes(xs, img, target_class, model, minimize=True):
     # Perturb the image with the given pixel(s) x and get the prediction of the model
@@ -117,28 +121,30 @@ def crossover_two_point(p1, p2, number_pixels):
   
 #   return ni
 
-def crossover_uniform(p1, p2, PROB_CROSSOVER, PIXELS):
-    genotype = []
+def crossover_uniform(p1, p2, PIXELS):
+  ni = []
+  for i in range(PIXELS):
+    pixel = []
+    for j in range(5):
+        if random.random() < 0.5:
+            pixel.append(p1['genotype'][i][j])
+        else:
+            pixel.append(p2['genotype'][i][j])
+    ni.append(pixel)
 
-    for i in range(PIXELS):
-        new_pixel = []
-        for g1, g2 in zip(p1['genotype'][i], p2['genotype'][i]):
-            new_pixel.append(int(g1) if random.random() < PROB_CROSSOVER else int(g2))
-        genotype.append(np.array(new_pixel, dtype=int))
+  return {'genotype': ni, 'fitness': None, 'confidence': None, 'success': None}
 
-    return {'genotype': genotype, 'fitness': None, 'confidence': None, 'success': None}
-
-def crossover_block(p1, p2, PROB_CROSSOVER, PIXELS):
+def crossover_block(p1, p2, PIXELS):
     ni = []
     for i in range(PIXELS):
         # CHOOSE WHICH (x,y) - p1 or p2
-        if random.random() < PROB_CROSSOVER:
+        if random.random() < 0.5:
             x_y = p1['genotype'][i][:2]
         else:
             x_y = p2['genotype'][i][:2]
 
         # CHOOSE HICH COLOR (r,g,b) - p1 or p2
-        if random.random() < PROB_CROSSOVER:
+        if random.random() < 0.5:
             r_g_b = p1['genotype'][i][2:]
         else:
             r_g_b = p2['genotype'][i][2:]
@@ -223,35 +229,65 @@ def dicio_trues_add(dicio, gene, soma_dif, image_orig, suc, suc_act, number_pixe
 
   return dicio, soma_dif, suc, suc_act, novo
 
-def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERATIONS, PROB_MUTATION, PROB_CROSSOVER, TOURNAMENT, PIXELS, bounds, folder_path, SEED, n_trials=20):
+def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERATIONS, PROB_MUTATION, PROB_CROSSOVER, TOURNAMENT, ELITISM, PIXELS, LOCAL_SEARCH_IT, bounds, folder_path, SEED, crossover_func=None, verbose=True, device=None):
+    log = print if verbose else (lambda *a, **k: None)
+    
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
     random.seed(SEED)
     dicio_total_pixels = {}
     # Boundaries
     w = bounds[0][1]
     h = bounds[1][1]
 
+    # Crossover Default Function
+    if crossover_func is None or crossover_func == "flatten_one_point":
+        # Se não passar, escolher um padrão, ex: crossover_one_point
+        crossover_func = crossover_one_point
+    elif crossover_func == "flatten_two_point":
+        crossover_func = crossover_two_point
+    elif crossover_func == "uniform":
+        crossover_func = crossover_uniform
+    elif crossover_func == "block":
+        crossover_func = crossover_block
+
     # Count success
     suc = 0
     suc_act = 0
     
-    # File to storage success
-    header = ['gen', 'genotype', 'true label', 'predicted label',' confidence in wrong label']
-    file_suc = f'{folder_path}/success_file.csv'
-    f_suc = open(file_suc, 'w')
-    writer_suc = csv.writer(f_suc)
-    writer_suc.writerow(header)
+    if folder_path != None:
+      # File to storage success
+      header = ['gen', 'genotype', 'true label', 'predicted label',' confidence in wrong label']
+      file_suc = f'{folder_path}/success_file.csv'
+      f_suc = open(file_suc, 'w')
+      writer_suc = csv.writer(f_suc)
+      writer_suc.writerow(header)
 
-    # File for evolution overview
-    header = ['gen', 'best fitness', 'best individual', 'best confidence', 'best success', 'true label', 'predicted label', 'average fitness', 'std fitness', 'prediction']
-    file_gen = f'{folder_path}/evolution_overview.csv'
-    f_gen_info = open(file_gen, 'w')
-    writer_gen_info = csv.writer(f_gen_info)
-    writer_gen_info.writerow(header)
+      # File for evolution overview
+      header = ['gen', 'best fitness', 'best individual', 'best confidence', 'best success', 'true label', 'predicted label', 'average fitness', 'std fitness', 'prediction']
+      file_gen = f'{folder_path}/evolution_overview.csv'
+      f_gen_info = open(file_gen, 'w')
+      writer_gen_info = csv.writer(f_gen_info)
+      writer_gen_info.writerow(header)
 
-    # This folder holds generation files that have all individuals 
-    gen_folder = f'{folder_path}/generations_files'
-    if not os.path.exists(gen_folder):
-        os.makedirs(gen_folder)
+      # File for Local Search
+      file_local = f"{folder_path}/new_best_by_local_search.csv"
+      f_ls = open(file_local, 'w')
+      writer_ls = csv.writer(f_ls)
+      writer_ls.writerow([
+          "img_id", "true_label",
+          "genotype_before", "genotype_after",
+          "fitness_before", "fitness_after",
+          "success_before", "success_after",
+          "confidence_before", "confidence_after",
+          "dif", "it_final_best", "it_first_best"
+      ])
+
+      # This folder holds generation files that have all individuals 
+      gen_folder = f'{folder_path}/generations_files'
+      if not os.path.exists(gen_folder):
+          os.makedirs(gen_folder)
 
     # Storage
     best_fit = []
@@ -264,30 +300,45 @@ def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERA
     dicio_trues = dict()
     it = 0
     soma_dif = 0
+    first_success_it = None
 
     # Evaluate how good the individuals are (problem dependent)
-    for it in range(it, NUMBER_OF_ITERATIONS):        
-        #o filtra_por novos deve ser um funcao que filtra os elementos da populacao que nao foram ainda vistos.
+    for it in range(it, NUMBER_OF_ITERATIONS):    
+        # o filtra_por novos deve ser um funcao que filtra os elementos da populacao que nao foram ainda vistos.
         # evaluate(filtra_por_novos(population), image, true_class, model)
-        evaluate(population, image, true_class, model, dicio_total_pixels, PIXELS)
+        evaluate(population, image, true_class, model, dicio_total_pixels, PIXELS, device=device)
 
+        # population.sort(key=lambda x: x['fitness'])
+        # best = population[-ELITISM:]
+        # best_fit.append(best['fitness'])
+
+        # 1) população atual já avaliada
         population.sort(key=lambda x: x['fitness'])
+
+        # 2) melhor indivíduo da geração
         best = population[-1]
         best_fit.append(best['fitness'])
+
+        # 3) elitismo
+        elite_individuals = population[-ELITISM:]
+        new_population = copy.deepcopy(elite_individuals)
+
         ## avaliar se é adversarial depois da avaliaçao
         for ni in population:
           if ni['success'] == True:
+            if first_success_it is None:
+              first_success_it = it
             dicio_trues, soma_dif, suc, suc_act, novo = dicio_trues_add(dicio_trues, ni, soma_dif, image, suc, suc_act, PIXELS)
             if novo:
               predicted_label = np.argmax(ni['confidence'])
               activation = np.max(ni['confidence'])
-              writer_suc.writerow([it, ni['genotype'], true_class, predicted_label, activation])
-
+              if folder_path != None:
+                writer_suc.writerow([it, ni['genotype'], true_class, predicted_label, activation])
 
         # Colocar o best e a média nesta iteração
 
         #bests.append(best)
-        print("Best at", it, best)
+        log("Best at", it, best)
 
         # Write for overview
         predicted_label = np.argmax(best['confidence'])
@@ -297,7 +348,8 @@ def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERA
         avg_fit.append(avg)
 
         # informaçao desta geraçao
-        writer_gen_info.writerow([it, best['fitness'], best['genotype'], activation, best['success'], true_class, predicted_label, avg_fit[it], np.std([ind['fitness'] for ind in population]), list(best['confidence'])])
+        if folder_path != None:
+          writer_gen_info.writerow([it, best['fitness'], best['genotype'], activation, best['success'], true_class, predicted_label, avg_fit[it], np.std([ind['fitness'] for ind in population]), list(best['confidence'])])
         #writer_gen_info.writerow([it, best['fitness'], best['genotype'], activation, best['success'], true_class, predicted_label, avg_fit[it], np.std([ind['fitness'] for ind in population]), best['confidence']])
 
         # Write entire population 
@@ -312,8 +364,49 @@ def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERA
         #     #writer_pergen.writerow([ind['genotype'], ind['fitness'], ind['success'], ind['confidence']])
         # f_pergen.close()
 
-        # elitismo
+        # elitismo + Local Search
         new_population = [best]
+        if LOCAL_SEARCH_IT > 0:
+          temp = local_search(image, best, true_class, n_trials=LOCAL_SEARCH_IT, SEED=SEED + it)  # SEED + it -> because if the best ind is the same as last population, with only "SEED" will explore the same pixels as previously
+          (best_genotype_ls,
+          best_fitness_ls,
+          succ_after,
+          conf_after,
+          dif_value,
+          it_final_best,
+          it_first_best,
+          new_best) = temp
+
+          genotype_before = best['genotype']
+          fitness_before = best['fitness']
+          success_before = best['success']
+          confidence_before = best['confidence']
+
+          if new_best['genotype'] == best['genotype']:
+              new_population = [best]
+          else:
+              # ESCREVER NO FICHEIRO → local search encontrou algo melhor
+              if folder_path != None:
+                writer_ls.writerow([
+                    img_id,
+                    true_class,
+                    genotype_before,
+                    new_best['genotype'],
+                    fitness_before,
+                    best_fitness_ls,
+                    success_before,
+                    succ_after,
+                    list(confidence_before),
+                    list(conf_after),
+                    dif_value,
+                    it_final_best,
+                    it_first_best
+                ])
+
+              new_population = [best, new_best]
+
+        # print("New population", new_population)
+
         #print("Populaçao inicial", population)
         ###### Operadores de variaçao e seleçao de descendentes 
         while len(new_population) < POPULATION_SIZE:
@@ -325,7 +418,7 @@ def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERA
                 while(np.array_equal(p2['genotype'], p1['genotype'])):
                   p2 = choose_indiv(population, TOURNAMENT)
                 # Recombination
-                ni = crossover_one_point(p1, p2, PIXELS)
+                ni = crossover_func(p1, p2, PIXELS)
 
                 #evaluate(ni, image, true_class, model)
 
@@ -340,12 +433,12 @@ def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERA
             new_population.append(copy.deepcopy(ni)) # para garantir
         population = new_population
         
-    print("Final: ", best)
-    bestie = perturb_image_mult_pixel(np.array(best['genotype']), image)
+    log("Final: ", best)
+    # bestie = perturb_image_mult_pixel(np.array(best['genotype']), image)
     # helper.plot_image(bestie)
     lista_trues = list(dicio_trues.keys())
-    print("Trues: ", lista_trues)
-    print("Pixeis encontrados: ", len(lista_trues))    # convem q este valor seja igual ao 'suc' (success - numero de bem sucedidos)
+    # print("Trues: ", lista_trues)
+    log("Pixeis encontrados: ", len(lista_trues))    # convem q este valor seja igual ao 'suc' (success - numero de bem sucedidos)
 
     # diferença media dos pixeis encontrados e o pixel original
     for i in dicio_trues.values():
@@ -354,26 +447,42 @@ def genetic_algorithm(image, true_class, model, POPULATION_SIZE, NUMBER_OF_ITERA
       media_difs = soma_dif  / len(lista_trues)
 
     # Close overview and sucess
-    f_gen_info.close()
-    f_suc.close()
+    if folder_path != None:
+      f_gen_info.close()
+      f_suc.close()
+      f_ls.close()
 
-    perturbed_image = perturb_image_mult_pixel(np.array(best['genotype']), image)
-    # Save perturbed image
-    perturbed_image = np.clip(perturbed_image, 0, 255).astype(np.uint8)
-    perturbed_pil_image = Image.fromarray(perturbed_image)
-    scaled_perturbed_pil_image = perturbed_pil_image.resize((320, 320))
-    scaled_perturbed_pil_image.save(f'{folder_path}/best_perturbed.png')
+      perturbed_image = perturb_image_mult_pixel(np.array(best['genotype']), image)
+      # Save perturbed image
+      perturbed_image = perturb_image_mult_pixel(best['genotype'], image, device=device)
+      perturbed_image = (
+          perturbed_image
+              .squeeze(0)        # remove batch se for 1
+              .detach()
+              .cpu()
+              .numpy()
+      )
+      perturbed_image = np.clip(perturbed_image, 0, 255).astype(np.uint8)
+      perturbed_pil_image = Image.fromarray(perturbed_image)
+      scaled_perturbed_pil_image = perturbed_pil_image.resize((320, 320))
+      scaled_perturbed_pil_image.save(f'{folder_path}/best_perturbed.png')
 
-    # Save original image
-    image = np.clip(image, 0, 255).astype(np.uint8)
-    original_pil_image = Image.fromarray(image)
-    scaled_original_pil_image = original_pil_image.resize((320, 320))
-    scaled_original_pil_image.save(f'{folder_path}/original_image.png')
+      # Save original image
+      image_np = (
+          image.detach().cpu().numpy()
+          if torch.is_tensor(image)
+          else image
+      )
+      image_np = np.clip(image_np, 0, 255).astype(np.uint8)
+      original_pil_image = Image.fromarray(image_np)
+      scaled_original_pil_image = original_pil_image.resize((320, 320))
+      scaled_original_pil_image.save(f'{folder_path}/original_image.png')
 
     del population
-    del f_gen_info
-    del f_suc
+    if folder_path != None:
+      del f_gen_info
+      del f_suc
     # del f_pergen
     gc.collect()
 
-    return best_fit, avg_fit, best, suc, suc_act, len(dicio_total_pixels)
+    return best_fit, avg_fit, best, suc, suc_act, len(dicio_total_pixels), first_success_it

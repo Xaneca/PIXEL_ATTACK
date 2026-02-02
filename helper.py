@@ -8,6 +8,8 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import requests
 from tqdm import tqdm
+import torch
+
 
 
 def perturb_image(xs, img):
@@ -36,17 +38,58 @@ def perturb_image(xs, img):
 
     return imgs
 
-def perturb_image_mult_pixel(genotype, img):
-    img_perturbed = np.copy(img)
-    genotype = np.array(genotype, dtype=int)
+# def perturb_image_mult_pixel(genotype, img):
+#     img_perturbed = np.copy(img)
+#     genotype = np.array(genotype, dtype=int)
 
-    for pixel in genotype:
-        x_pos, y_pos, r, g, b = pixel
-        if 0 <= x_pos < img.shape[0] and 0 <= y_pos < img.shape[1]:
-            img_perturbed[x_pos, y_pos] = [r, g, b]
+#     for pixel in genotype:
+#         x_pos, y_pos, r, g, b = pixel
+#         if 0 <= x_pos < img.shape[0] and 0 <= y_pos < img.shape[1]:
+#             img_perturbed[x_pos, y_pos] = [r, g, b]
 
-    return img_perturbed
+#     return img_perturbed
 
+def perturb_image_mult_pixel(genotypes, img, device='cpu'):
+    """
+    Aplica várias perturbações a uma imagem para todos os genótipos (indivíduos) do batch.
+
+    Args:
+        genotypes: np.ndarray ou torch.Tensor [batch, n_pixels, 5] ou [n_pixels, 5]
+        img: np.ndarray ou torch.Tensor [H, W, 3]
+        device: 'cpu' ou 'cuda'
+
+    Returns:
+        torch.Tensor [batch, H, W, 3] com as imagens perturbadas
+    """
+
+     # ---- garantir TUDO em torch + device ----
+    img = torch.as_tensor(img, dtype=torch.float32, device=device)
+    genotypes = torch.as_tensor(genotypes, dtype=torch.float32, device=device)
+
+    # ---- garantir dimensão batch ----
+    if genotypes.ndim == 2:
+        genotypes = genotypes.unsqueeze(0)
+
+    batch, n_pixels, _ = genotypes.shape
+    H, W, C = img.shape
+
+    # ---- replicar imagem ----
+    imgs = img.unsqueeze(0).expand(batch, -1, -1, -1).clone()
+
+    # ---- separar coords ----
+    genotypes = genotypes.long()
+    x = genotypes[:, :, 0]
+    y = genotypes[:, :, 1]
+    rgb = genotypes[:, :, 2:5].to(imgs.dtype)
+
+    # ---- batch index ----
+    b_idx = torch.arange(batch, device=device).unsqueeze(1).expand(-1, n_pixels)
+
+    # ---- escrita vectorizada ----
+    imgs[b_idx, x, y] = rgb
+
+    return imgs
+    
 def plot_image(image, label_true=None, class_names=None, label_pred=None):
     if image.ndim == 4 and image.shape[0] == 1:
         image = image[0]

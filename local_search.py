@@ -10,7 +10,7 @@ import re
 
 ### CHANGE PARAMETERS HERE ### 
 nruns = 5
-seeds = list(range(nruns))
+seeds = list(range(nruns + 1))
 n_samples = 500
 n_pixels = 3
 results_file = "./results"
@@ -165,7 +165,84 @@ def local_search(img_id, ind, true_label, n_trials=100, pixel_radius=2, rgb_radi
     # diferença entre imagem original e perturbada
     dif_value = dif(x_test[img_id], best_genotype)
 
-    return best_genotype, best_fitness, l_suc, l_conf, dif_value, it_to_final_best, it_to_first_best
+    return best_genotype, best_fitness, l_suc, l_conf, dif_value, it_to_final_best, it_to_first_best, ind
+
+# com imagem, sem o id
+def local_search(img, ind, true_label, n_trials=100, pixel_radius=2, rgb_radius=20, SEED=42):
+    it_to_final_best = 0
+    it_to_first_best = 0
+    
+    num_bests = 0
+
+    cur_suc = ind['success']
+
+    best_fitness = ind['fitness']
+    best_genotype = [p.copy() for p in ind['genotype']]
+
+    (h, w, d) = img.shape  # agora vem da imagem recebida diretamente
+    
+    # número de tentativas por pixel
+    trials_per_pixel = n_trials // len(ind['genotype'])
+    remainder = n_trials % len(ind['genotype'])
+
+    for i, pixel in enumerate(ind['genotype']):
+        extra = 1 if i < remainder else 0
+        total_trials = trials_per_pixel + extra
+        
+        for it in range(total_trials):
+
+            new_genotype = [p.copy() for p in best_genotype]
+
+            x0, y0, r0, g0, b0 = best_genotype[i]
+
+            # RGB ORIGINAL vindo da imagem diretamente
+            orig_r, orig_g, orig_b = img[x0][y0]
+
+            # deslocamento opcional
+            dx = np.random.randint(-pixel_radius, pixel_radius+1)
+            dy = np.random.randint(-pixel_radius, pixel_radius+1)
+            new_x = int(np.clip(x0 + dx, 0, w-1))
+            new_y = int(np.clip(y0 + dy, 0, h-1))
+
+            # gerar RGB perto do original
+            new_r = np.clip(orig_r + np.random.randint(-rgb_radius, rgb_radius+1), 0, 255)
+            new_g = np.clip(orig_g + np.random.randint(-rgb_radius, rgb_radius+1), 0, 255)
+            new_b = np.clip(orig_b + np.random.randint(-rgb_radius, rgb_radius+1), 0, 255)
+
+            new_genotype[i] = [new_x, new_y, int(new_r), int(new_g), int(new_b)]
+
+            # avaliar candidato
+            candidate = {
+                'genotype': new_genotype,
+                'fitness': None,
+                'confidence': None,
+                'success': None
+            }
+
+            evaluate([candidate], img, true_label, models[0], {}, len(ind['genotype']))
+
+            if candidate['fitness'] > best_fitness and (not cur_suc or candidate['success']):
+                best_fitness = candidate['fitness']
+                best_genotype = [p.copy() for p in new_genotype]
+                cur_run = candidate['success']
+
+                if num_bests == 0:
+                    it_to_first_best = it
+                num_bests += 1
+                it_to_final_best = it
+
+    # atualizar indivíduo final
+    ind['genotype'] = best_genotype
+    ind['fitness'] = best_fitness
+
+    # sucesso final
+    l_suc, l_conf = attack_success([best_genotype], img, true_label, models[0])
+    ind['success'] = l_suc
+    ind['confidence'] = l_conf[0]
+
+    dif_value = dif(img, best_genotype)
+
+    return best_genotype, best_fitness, l_suc, l_conf, dif_value, it_to_final_best, it_to_first_best, ind
 
 
 def main():
@@ -240,18 +317,19 @@ def main():
                     genotype = best_individuals_before[i]
                     fitness = best_fitness_before[i]
                     ind = {'genotype': genotype, 'fitness': fitness, 'confidence': None, 'success': None}
-                    gen, fit, suc, conf, dif_value, it_final_best_value, it_first_best_value = local_search(img_ids[i], ind, true_labels[i])
+                    img = img_ids[i]
+                    gen, fit, suc, conf, dif_value, it_final_best_value, it_first_best_value, _ = local_search(img, ind, true_labels[i])
 
                     best_individuals_after.append(gen)
                     best_fitness_after.append(fit)
                     best_success_after.append(suc)
                     best_confidence_after.append(conf)
                     best_dif_after.append(dif_value)
-                    it_final_best.append(it_final_best)
-                    it_first_best.append(it_first_best)
+                    it_final_best.append(it_final_best_value)
+                    it_first_best.append(it_first_best_value)
 
                     if fit != best_fitness_before[i]:
-                        print(i, "|", best_fitness_before[i], "|", best_fitness_after[i])
+                        print(i, "|", best_fitness_before[i], "|", best_fitness_after[i], "|", it_first_best_value, "|", it_final_best_value)
                         img_changed.append(i)
                     else:
                         print(i, "|", fit)

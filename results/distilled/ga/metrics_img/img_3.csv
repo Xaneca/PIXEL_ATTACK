@@ -1,0 +1,6 @@
+run,success rate,adv probability
+1,0.065,"[np.float32(45.41242), np.float32(698.6526)]"
+2,0.115,"[np.float32(91.44933), np.float32(795.2116)]"
+3,0.02,"[np.float32(16.127125), np.float32(806.35626)]"
+4,0.065,"[np.float32(49.08189), np.float32(755.106)]"
+5,0.05,"[np.float32(37.33505), np.float32(746.701)]"

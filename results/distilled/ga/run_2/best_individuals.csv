@@ -1,0 +1,6 @@
+img_counter,img_id,best pixel,fitness,true label,predicted label,prior confidence in true label,post confidence true label,confidence wrong label
+0,5027,"[array([ 24,  15, 161,  56, 106]), array([19, 10, 20, 13,  5]), array([ 25,  11, 127,  59,  73])]",0.8871378302574158,0,0,1.0,"tf.Tensor(1437.4515, shape=(), dtype=float32)",0
+1,2757,"[array([  8,   5,  81, 130,  86]), array([ 21,   8, 150, 232, 211]), array([ 15,  26, 132,  16,  38])]",0.8756802678108215,1,1,1.0,"tf.Tensor(941.18933, shape=(), dtype=float32)",0
+2,374,"[array([  5,  17, 104, 159, 102]), array([  2,  11,  41, 143,  45]), array([  3,   9,  54, 162, 119])]",0.9156461358070374,2,2,1.0,"tf.Tensor(1063.7924, shape=(), dtype=float32)",0
+3,9295,"[array([ 2, 26, 20, 38, 65]), array([ 18,  12,  71,  45, 195]), array([ 18,  26,   2, 196,  67])]",1.794679045677185,3,6,1.0,"tf.Tensor(721.11786, shape=(), dtype=float32)",781.59
+4,3326,"[array([24,  8, 51, 89, 56]), array([ 15,   5, 123,  82,  55]), array([ 13,  29, 190, 150, 129])]",0.9031804203987122,4,4,1.0,"tf.Tensor(944.35345, shape=(), dtype=float32)",0

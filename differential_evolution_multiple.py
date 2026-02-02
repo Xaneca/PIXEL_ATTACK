@@ -5,43 +5,72 @@ import numpy as np
 import helper
 from PIL import Image
 import gc
-import tensorflow as tf
-import keras
+import torch
+import torch.nn.functional as F
 from helper import perturb_image_mult_pixel
 
-def attack_success(x, img, true_class, model, verbose=False):
-    # Perturb the image with the given pixel(s) and get the prediction of the model
-    perturbed = []
-    for xi in x:
-        perturbed.append(perturb_image_mult_pixel(xi, img)) # x é lista de pixeis
-    perturbed = np.array(perturbed, dtype=np.float32)
-    perturbed = (perturbed / 255) - 0.5 # para os modelos do carlini
-    
-    list_confidence = model.predict(perturbed) # leak! com problemas [ [0 for i in range(10)] for k in perturbed] #fake eval all 0 for each class #model.predict(perturbed)
-    
-    # Apply softmax to the logits
-    # Calculate the maximum logits for each sample
-    max_logits = np.max(list_confidence, axis=1, keepdims=True)
 
-    # Subtract the maximum logits from the original logits to improve numerical stability
-    shifted_logits = list_confidence - max_logits
+def attack_success(genotypes, img, true_class, model, verbose=False, device='cpu'):
+    """
+    Avalia a taxa de sucesso de uma perturbação em batch usando PyTorch.
 
-    # Apply softmax to the shifted logits for all predictions
-    exp_logits = np.exp(shifted_logits)
-    list_confidence = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
-    
-    _ = gc.collect() 
-    keras.backend.clear_session()
+    Args:
+        genotypes: [batch, n_pixels, 5] ou [n_pixels, 5]
+        img: [H, W, 3] imagem original
+        true_class: rótulo verdadeiro (int)
+        model: modelo PyTorch (torch.nn.Module)
+        verbose: bool
+        device: 'cpu' ou 'cuda'
 
+    Returns:
+        list_success: lista de booleanos se cada indivíduo foi bem-sucedido
+        list_confidence: array [batch, num_classes] das probabilidades
+    """
 
-    list_success = []
+    # Perturbar a imagem para todos os genótipos
+    perturbed = perturb_image_mult_pixel(genotypes, img, device=device)
 
-    for confidence in list_confidence:
-      predicted_class = np.argmax(confidence)
-      if (predicted_class != true_class):
-          list_success.append(True)
-      else:
-          list_success.append(False)
+    # Normalização Carlini
+    perturbed = (perturbed / 255.0) - 0.5
+
+    # HWC → CHW
+    perturbed = perturbed.permute(0, 3, 1, 2)
+
+    # Avaliação do modelo
+    model.eval()
+    with torch.no_grad():
+        logits = model(perturbed)
+        probs = torch.softmax(logits, dim=1)
+
+    predicted = torch.argmax(probs, dim=1)
+
+    # True se o modelo errou a classificação
+    list_success = (predicted != true_class).tolist()
+    list_confidence = probs.cpu().numpy()
+
+    return list_success, list_confidence
+
+def attack_success(genotypes, img, true_class, model, verbose=False, device='cuda'):
+    # 1. Perturbação rápida usando PyTorch na GPU
+    # Assume-se que perturb_image_mult_pixel já devolve um torch.Tensor em 'device'
+    with torch.no_grad():
+        perturbed_torch = perturb_image_mult_pixel(genotypes, img, device=device)
+        
+        # Normalização Carlini (ainda na GPU com Torch)
+        perturbed_torch = (perturbed_torch / 255.0) - 0.5
+        
+        # 2. Conversão para NumPy (Necessário para o modelo Keras entrar em cena)
+        # O Keras/TF não lê Tensors do PyTorch diretamente
+        perturbed_numpy = perturbed_torch.cpu().numpy()
+
+    # 3. Avaliação do modelo Keras
+    # Usamos o modelo normalmente. 
+    # Dica: model.predict é mais lento em loops; model(data, training=False) é mais rápido.
+    list_confidence = model.predict(perturbed_numpy)
+
+    # 4. Cálculo do Sucesso (usando NumPy/Saída do Keras)
+    predicted_classes = np.argmax(list_confidence, axis=1)
+    list_success = (predicted_classes != true_class).tolist()
 
     return list_success, list_confidence
 
@@ -87,7 +116,9 @@ def dicio_total_add(dicio, pixel):
         string += (str(i) + '_')
     dicio[string] = [pixel['fitness'], pixel['confidence'], pixel['success']]
 
-def evaluate(popul, image, true_class, model, dicio_total_pixels, number_pixels):
+def evaluate(popul, image, true_class, model, dicio_total_pixels, number_pixels, device=None):
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     genotypes = []
     new_pop = []
     for i in range(len(popul)):
@@ -104,7 +135,7 @@ def evaluate(popul, image, true_class, model, dicio_total_pixels, number_pixels)
            genotypes.append(popul[i]['genotype'])
            new_pop.append(popul[i])
     if len(genotypes) > 0:
-        success, confidence_x = attack_success(np.array(genotypes), image, true_class, model, verbose=False)
+        success, confidence_x = attack_success(np.array(genotypes), image, true_class, model, verbose=False, device=device)
         fitness(new_pop, success, confidence_x, image, dicio_total_pixels, true_class, number_pixels) # [true_class]
 
 def fitness(population, success_x, confidence_x, image_orig, dicio, true_label, number_pixels): # x é um array do tipo [x, y, r, g, b]
@@ -120,12 +151,62 @@ def fitness(population, success_x, confidence_x, image_orig, dicio, true_label, 
         t_difs += (abs(x1[2] - image_orig[x1[0]][x1[1]][0]) + abs(x1[3] - image_orig[x1[0]][x1[1]][1]) + abs(x1[4] - image_orig[x1[0]][x1[1]][2])) / 3
 
     # ver isto da fitness ⚠️
+    # f = 1.0 / ( t_difs + 1) + 1 * int(success_x[ind]) + (1.0 /(confidence_x[ind][true_label]+1))
     f = 1.0 / ( t_difs / (255 * number_pixels) + 1) + 1 * int(success_x[ind]) + (1.0 /(confidence_x[ind][true_label]+1))
     population[ind]['fitness'] = f
     population[ind]['confidence'] = confidence_x[ind]
     population[ind]['success'] = success_x[ind]
     # add to dict
     dicio_total_add(dicio, population[ind])
+
+def fitness(population, success_x, confidence_x, image_orig, dicio, true_label, number_pixels, device='cpu'):
+
+    pop_size = len(population)
+
+    # -------- juntar genotypes num tensor --------
+    genotypes = torch.tensor(
+        [ind['genotype'] for ind in population],
+        dtype=torch.long,
+        device=device
+    )  # [batch, pixels, 5]
+
+    image_orig = torch.as_tensor(image_orig, dtype=torch.float32, device=device)
+
+    # -------- separar coords --------
+    x = genotypes[:, :, 0]
+    y = genotypes[:, :, 1]
+    rgb = genotypes[:, :, 2:5].float()
+
+    # -------- pegar cores originais --------
+    b_idx = torch.arange(pop_size, device=device).unsqueeze(1).expand(-1, number_pixels)
+
+    orig_rgb = image_orig[x, y]  # [batch, pixels, 3]
+
+    # -------- diferença absoluta --------
+    difs = torch.abs(rgb - orig_rgb)
+
+    # média por pixel e soma total
+    t_difs = difs.mean(dim=2).sum(dim=1)  # [batch]
+
+    # -------- fitness --------
+    success = torch.tensor(success_x, dtype=torch.float32, device=device)
+    confidence_np = confidence_x.numpy() if hasattr(confidence_x, "numpy") else confidence_x
+    confidence = torch.from_numpy(confidence_np[:, true_label]).float().to(device)
+
+    fitness_vals = (
+        1.0 / (t_difs / (255 * number_pixels) + 1)
+        + success
+        + 1.0 / (confidence + 1)
+    )
+
+    fitness_vals = fitness_vals.cpu().numpy()
+
+    # -------- escrever de volta (único loop leve) --------
+    for ind, f, conf, suc in zip(population, fitness_vals, confidence_x, success_x):
+        ind['fitness'] = float(f)
+        ind['confidence'] = conf
+        ind['success'] = suc
+        dicio_total_add(dicio, ind)
 
 def mutation(a, b, c, F):
     new_pixel = []

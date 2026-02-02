@@ -86,3 +86,10 @@ After adversarial pixels are initially detected, this script searches around tho
 
 * more effective
 * less perceptible
+
+---
+
+# RUNNING CODE:
+
+Adapt as you need:
+\>\> TF_FORCE_GPU_ALLOW_GROWTH=true CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=1 python run_cycle_ga.py 

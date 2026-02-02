@@ -1,0 +1,8 @@
+First time running after changing numpy to pytorch
+
+Time:
+run 1 - 28.94
+run 2 - 22.55
+run 3 - 25.02
+run 4 - 22.09
+run 5 - 24.28

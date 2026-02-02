@@ -1,0 +1,3 @@
+name,accuracy
+regular,0.7845
+distilled,0.7536

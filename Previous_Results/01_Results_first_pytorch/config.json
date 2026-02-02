@@ -1,0 +1,17 @@
+{
+  "nruns": 5,
+  "seeds": [0,1,2,3,4],
+  "n_samples": 5,
+  "pop_size": 40,
+  "generations": 5,
+  "pixels": 3,
+  "mut": 0.25,
+  "cr": 0.9,
+  "tournament": 2,
+  "elitism": 1,
+  "local_search_it": 0,
+  "models": ["cifar_100"],
+  "model_Names": ["distilled"],
+  "abordagens": ["ga"],
+  "results_path": "./results"
+}

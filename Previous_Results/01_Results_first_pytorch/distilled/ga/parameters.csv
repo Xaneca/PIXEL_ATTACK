@@ -1,0 +1,2 @@
+nruns,seeds,n_samples,samples,pop_size,generations,pixels,mut,cr,tournament
+5,"[0, 1, 2, 3, 4]",5,"[5027, 2757, 374, 9295, 3326]",40,5,3,0.25,0.9,2
